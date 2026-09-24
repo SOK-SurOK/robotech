@@ -1,0 +1,79 @@
+services:
+
+  # Здесь должен быть ваш сервис/сервисы
+  # Используйте .env для переменных окружения
+
+  checker:
+    build:
+      context: ..
+      dockerfile: ./services/checker/Dockerfile
+    container_name: checker
+    ports:
+      - "${TCP_PORT}:${TCP_PORT}"
+      - "${WS_PORT}:${WS_PORT}"
+    depends_on:
+      - rabbitmq
+      - minio
+    networks:
+      - my_network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - rmq_data:/var/lib/rabbitmq
+    command: bash -c "
+        rabbitmq-server &
+        sleep 10 &&
+        rabbitmqadmin -u ${RABBITMQ_DEFAULT_USER} -p ${RABBITMQ_DEFAULT_PASS} -H rabbitmq declare exchange name=inference.in type=direct &&
+        rabbitmqadmin -u ${RABBITMQ_DEFAULT_USER} -p ${RABBITMQ_DEFAULT_PASS} -H rabbitmq declare queue name=inference.in durable=true &&
+        rabbitmqadmin -u ${RABBITMQ_DEFAULT_USER} -p ${RABBITMQ_DEFAULT_PASS} -H rabbitmq declare binding source=inference.in destination=inference.in routing_key=inference.in &&
+        wait"
+    networks:
+      - my_network
+
+  minio:
+    platform: linux/x86_64
+    image: minio/minio
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - min_data:/data
+    command: server /data --console-address ":9001"
+    restart: always
+    networks:
+      - my_network
+
+  mc:
+    image: minio/mc:latest
+    container_name: minio_mc
+    depends_on:
+      - minio
+    entrypoint: >
+      sh -c "
+        until mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}; do sleep 1; done &&
+        mc mb myminio/images &&
+        mc anonymous set public myminio/images
+      "
+    restart: "no"
+    networks:
+      - my_network
+  
+volumes:
+  min_data:
+  rmq_data:
+
+networks:
+  my_network:
+    driver: bridge
