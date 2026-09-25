@@ -1,6 +1,6 @@
 [project]
 name = "m0-plc"
 version = "0.1.0"
-description = "Эмулятор PLC: TCP-сервер с командой [s][save_image][e] (synetra-be-challenge)"
+description = "Эмулятор PLC: TCP-сервер с командой [s][save_image][e]"
 requires-python = ">=3.11"
 dependencies = []

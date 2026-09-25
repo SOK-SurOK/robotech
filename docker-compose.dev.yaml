@@ -1,0 +1,77 @@
+# Dev-режим: поднимает только инфраструктуру (rabbitmq + minio + web-клиент).
+# Сервисы plc / api / camera запускаются локально из своих venv
+# (см. README, раздел «Запуск в dev-режиме») и подключаются к localhost.
+name: robotech-dev
+
+x-minio-auth: &minio-auth
+  MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+  MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+x-rabbitmq-auth: &rabbitmq-auth
+  RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+  RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+
+services:
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-dev
+    environment:
+      <<: *rabbitmq-auth
+      TZ: ${TZ}
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"
+    volumes:
+      - rmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
+  minio:
+    image: ${MINIO_IMAGE}
+    container_name: minio-dev
+    environment:
+      <<: *minio-auth
+      TZ: ${TZ}
+    ports:
+      - "${MINIO_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - min_data:/bitnami/minio/data
+    command: server /bitnami/minio/data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  minioClient:
+    image: ${MC_IMAGE}
+    container_name: minio_client_dev
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+        mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
+        mc mb --ignore-existing myminio/${MINIO_BUCKET} &&
+        mc anonymous set public myminio/${MINIO_BUCKET}
+      "
+    restart: "no"
+
+  web:
+    image: nginx:alpine
+    container_name: web_client_dev
+    ports:
+      - "${WEB_PORT}:8080"
+    volumes:
+      # api в dev-режиме работает на хосте, поэтому отдельный конфиг с host.docker.internal
+      - ./docker/web/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/web/static:/usr/share/nginx/html:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  min_data:
+  rmq_data:

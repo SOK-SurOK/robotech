@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def create_app(db_path: str) -> FastAPI:
   init_db(db_path)
-  app = FastAPI(version="0.1.0", title="synetra api")
+  app = FastAPI(version="0.1.0", title="robotech api")
 
   @app.post("/images/", response_model=ImageOut, status_code=status.HTTP_201_CREATED)
   def post_image(item: ImageCreate) -> ImageOut:
