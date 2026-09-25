@@ -1,2 +1,5 @@
 .idea/
 backend_test/
+.venv/
+__pycache__/
+excercise.db

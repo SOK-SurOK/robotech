@@ -1,0 +1,13 @@
+.git
+.idea
+**/.venv
+**/__pycache__
+old
+tests
+backend_test
+docker
+*.db
+.env
+.env-dev
+README.md
+schema.png
