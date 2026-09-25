@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>synetra — мониторинг линии</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; background: #f5f5f5; color: #222; }
+    h1 { font-size: 1.4em; }
+    .status { padding: 4px 10px; border-radius: 4px; background: #ddd; }
+    .status.ok { background: #b7e4b7; }
+    .status.err { background: #f0b7b7; }
+    #events { list-style: none; padding: 0; }
+    #events li { background: #fff; margin: 8px 0; padding: 10px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    #events img { max-height: 120px; display: block; margin-top: 8px; }
+    table { border-collapse: collapse; background: #fff; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+    button { padding: 6px 14px; margin-bottom: 10px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Мониторинг линии <span id="ws-status" class="status">ws: подключение...</span></h1>
+
+  <h2>События (websocket)</h2>
+  <ul id="events"></ul>
+
+  <h2>Записи в БД</h2>
+  <button onclick="loadImages()">Обновить список</button>
+  <table>
+    <thead><tr><th>id</th><th>image_url</th><th>width</th><th>height</th><th>скачать</th></tr></thead>
+    <tbody id="images"></tbody>
+  </table>
+
+  <script>
+    // Порт WS проброшен на хост как есть; при смене WS_PORT поправьте здесь
+    const wsUrl = `ws://${location.hostname}:1234`;
+    const statusEl = document.getElementById('ws-status');
+    const eventsEl = document.getElementById('events');
+
+    function connectWs() {
+      const ws = new WebSocket(wsUrl);
+      ws.onopen = () => { statusEl.textContent = 'ws: подключено'; statusEl.className = 'status ok'; };
+      ws.onclose = () => {
+        statusEl.textContent = 'ws: отключено, переподключение...';
+        statusEl.className = 'status err';
+        setTimeout(connectWs, 3000);
+      };
+      ws.onerror = () => ws.close();
+      ws.onmessage = (event) => {
+        let data;
+        try { data = JSON.parse(event.data); } catch { data = { image_url: event.data }; }
+        const li = document.createElement('li');
+        li.innerHTML = `<b>Кадр захвачен</b> id=${data.id ?? '-'}, ${data.width ?? '?'}x${data.height ?? '?'}, ` +
+          `ts=${data.ts ?? '-'}<br><a href="${data.image_url}" target="_blank">${data.image_url}</a>` +
+          `<img src="${data.image_url}" alt="frame">`;
+        eventsEl.prepend(li);
+        loadImages();
+      };
+    }
+
+    async function loadImages() {
+      const res = await fetch('/api/images/');
+      const rows = await res.json();
+      document.getElementById('images').innerHTML = rows.map(r =>
+        `<tr><td>${r.id}</td><td>${r.image_url}</td><td>${r.width}</td><td>${r.height}</td>` +
+        `<td><a href="${r.image_url}" download target="_blank">скачать</a></td></tr>`
+      ).join('');
+    }
+
+    connectWs();
+    loadImages();
+  </script>
+</body>
+</html>
